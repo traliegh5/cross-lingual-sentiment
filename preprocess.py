@@ -1,4 +1,4 @@
-from transformers import *
+from transformers import XLMRobertaTokenizer
 from torch.utils.data import Dataset, DataLoader
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -30,11 +30,13 @@ class SentimentData(Dataset):
         
         
         self.lengths=[]
-       
+        self.labels=[]
         self.tokenizer=tokenizer
-        self.sentences=[]
-
-        self.start=tokenizer.bos_token_id
+        self.pad_token=tokenizer("<pad>")["input_ids"][1]
+        
+        self.tokens=[]
+        self.texts=[]
+        # self.start=tokenizer.bos_token_id
         
         
         
@@ -46,8 +48,11 @@ class SentimentData(Dataset):
                 if not line:
                     break
                 
-                cent=line.strip().split()
-                self.sentences.append(cent)
+                
+                self.labels.append(int(line[0]))
+                self.texts.append(line[1:])
+                toke=self.tokenizer(line[1:])['input_ids']
+                self.tokens.append(torch.as_tensor(toke))
                 # cent.insert(0,'START')
                 # token=self.tokenizer(line)['input_ids']
                 # token=token[:self.window_size]
@@ -62,16 +67,15 @@ class SentimentData(Dataset):
 
                 
                 # self.lengths.append(len(token)-1)
-                
        
-        # self.tense=pad_sequence(self.tense,batch_first=True,padding_value=padding_value)
+        self.labels=torch.as_tensor(self.labels)
+        self.tokens=pad_sequence(self.tokens,batch_first=True,padding_value=self.pad_token)
         # print(max(self.lengths))
         # self.masks=pad_sequence(self.masks,batch_first=True,padding_value=padding_value)
       
         
-        
-        
-        print(self.sentences[0:5])
+      
+
         
         
     
@@ -87,7 +91,7 @@ class SentimentData(Dataset):
         # TODO: Override method to return length of dataset
         
         # return self.sentences.shape[0]
-        return 16
+        return self.labels.shape[0]
 
     def __getitem__(self, idx):
         """
@@ -99,6 +103,13 @@ class SentimentData(Dataset):
         """
         # TODO: Override method to return the items in dataset
        
+        item={"input":self.tokens[idx,:],"label":self.labels[idx],"pad_token":self.pad_token}
         
-        
-        return {}
+        return item
+if __name__ == "__main__":
+    tokenizer=XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+    german_train_set=SentimentData("Data/de/train.tsv",10,tokenizer)
+    german_test_set=SentimentData("Data/de/test.tsv",10,tokenizer)
+    japanese_train_set=SentimentData("Data/it/train.tsv",10,tokenizer)
+    item=japanese_train_set.__getitem__(0)
+    print(item["input"],item["label"])
