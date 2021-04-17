@@ -37,9 +37,7 @@ class SentimentData(Dataset):
         self.tokens=[]
         self.texts=[]
         # self.start=tokenizer.bos_token_id
-        
-        
-        
+
         with open(input_file,'r') as f:
             
             while True:
@@ -48,10 +46,9 @@ class SentimentData(Dataset):
                 if not line:
                     break
                 
-                
                 self.labels.append(int(line[0]))
                 self.texts.append(line[1:])
-                toke=self.tokenizer(line[1:])['input_ids']
+                toke=self.tokenizer(line[1:])['input_ids'][:window_size]
                 self.tokens.append(torch.as_tensor(toke))
                 # cent.insert(0,'START')
                 # token=self.tokenizer(line)['input_ids']
@@ -64,24 +61,21 @@ class SentimentData(Dataset):
                 # temp[len(token):]=0.0
                 # self.masks.append(temp)
                 
-
-                
-                # self.lengths.append(len(token)-1)
+                self.lengths.append(len(toke))
        
         self.labels=torch.as_tensor(self.labels)
         self.tokens=pad_sequence(self.tokens,batch_first=True,padding_value=self.pad_token)
+        # print("Size of tokens: " + str(self.tokens.size()))
+        # print("Size of labels: " + str(self.labels.size()))
+        # print("Size of lengths: " + str(len(self.lengths)))
+        # print("Some tokens")
+        # print(self.tokens[:5])
+        # print("Some labels")
+        # print(self.labels[:5])
+        # print("Some lengths")
+        # print(self.lengths[:5])
         # print(max(self.lengths))
         # self.masks=pad_sequence(self.masks,batch_first=True,padding_value=padding_value)
-      
-        
-      
-
-        
-        
-    
-        
-        
-        pass
 
     def __len__(self):
         """
@@ -103,9 +97,10 @@ class SentimentData(Dataset):
         """
         # TODO: Override method to return the items in dataset
        
-        item={"input":self.tokens[idx,:],"label":self.labels[idx],"pad_token":self.pad_token}
-        
-        return item
+        #item={"input":self.tokens[idx,:],"label":self.labels[idx],"pad_token":self.pad_token}
+        item={"input":self.tokens[idx,:],"label":self.labels[idx],"lengths":self.lengths[idx]}
+        return (self.tokens[idx], self.labels[idx], self.lengths[idx])
+
 if __name__ == "__main__":
     tokenizer=XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
     german_train_set=SentimentData("Data/de/train.tsv",10,tokenizer)
