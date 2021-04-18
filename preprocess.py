@@ -4,7 +4,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 
 class SentimentData(Dataset):
-    def __init__(self, input_file,window_size, tokenizer):
+    def __init__(self, input_file,window_size, tokenizer, dataset):
         """
         Read and parse the translation dataset line by line. Make sure you
         separate them on tab to get the original sentence and the target
@@ -33,7 +33,8 @@ class SentimentData(Dataset):
         self.labels=[]
         self.tokenizer=tokenizer
         self.pad_token=tokenizer("<pad>")["input_ids"][1]
-        
+        self.cls_token=tokenizer("<cls>")["input_ids"][1]
+
         self.tokens=[]
         self.texts=[]
         # self.start=tokenizer.bos_token_id
@@ -45,11 +46,31 @@ class SentimentData(Dataset):
                 
                 if not line:
                     break
-                
-                self.labels.append(int(line[0]))
-                self.texts.append(line[1:])
-                toke=self.tokenizer(line[1:])['input_ids'][:window_size]
-                self.tokens.append(torch.as_tensor(toke))
+
+                if (dataset == "nlproc"):
+                    self.labels.append(int(line[0]))
+                    text = line[1:]
+                    self.texts.append(text)
+                    toke=self.tokenizer(text)['input_ids'][:(window_size-1)]
+                    toke.insert(0,self.cls_token)
+                    self.tokens.append(torch.as_tensor(toke))
+                else:
+                    tabbed = line.split("\t")
+                    text = tabbed[0]
+                    line_labels = tabbed[1]
+                    toke=self.tokenizer(text)['input_ids'][:(window_size-1)]
+                    toke.insert(0,self.cls_token)
+                    num_emotions = 8
+                    prepped_label = [0] * num_emotions
+
+                    for i in range(num_emotions):
+                        if str(i) in line_labels:
+                            prepped_label[i] = 1
+
+                    self.labels.append(prepped_label)
+                    self.texts.append(text)
+                    
+                    self.tokens.append(torch.as_tensor(toke))
                 # cent.insert(0,'START')
                 # token=self.tokenizer(line)['input_ids']
                 # token=token[:self.window_size]

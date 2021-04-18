@@ -2,7 +2,7 @@ from comet_ml import Experiment
 import torch
 import argparse
 from torch import nn, optim
-from transformers import XLMRobertaTokenizer, AutoTokenizer
+from transformers import XLMRobertaTokenizer, AutoTokenizer, AdamW
 from torch.utils.data import DataLoader
 #from get_data import load_dataset
 from preprocess import SentimentData
@@ -57,8 +57,9 @@ def train(model, train_loader, optimizer,experiment,hyperparams, pad_id):
                 word_count = sum(lengths)
                 total_loss += (loss * word_count)
                 total_word_count += word_count
-                indices = torch.max(probs, 1)[1]
-                total_f1 += f1_score(labels, indices, average='binary')
+                indices = torch.max(probs, 1)[1].cpu().data.numpy()
+                f1 = f1_score(labels.cpu().data.numpy(), indices, average='binary')
+                total_f1 += f1
                 print("At batch " + str(batch_num) + " loss is: " + str(loss))
 
         # Log perplexity to Comet.ml using experiment.log_metric
@@ -98,8 +99,8 @@ def test(model, test_loader, experiment, hyperparams, pad_id):
                 word_count = sum(lengths)
                 total_loss += (loss * word_count)
                 total_word_count += word_count
-                indices = torch.max(probs, 1)[1]
-                total_f1 += f1_score(labels, indices, average='binary')
+                indices = torch.max(probs, 1)[1].cpu().data.numpy()
+                total_f1 += f1_score(labels.cpu().data.numpy(), indices, average='binary')
                 print("At batch " + str(batch_num) + " loss is: " + str(loss))
 
         mean_loss = total_loss / total_word_count
@@ -117,8 +118,10 @@ if __name__ == "__main__":
     # parser.add_argument("test_file")
     parser.add_argument("-m", "--model", type=str, default="",
                         help="xlmr or bert")
-    parser.add_argument("-lang", "--language", type=str, default="",
-                        help="it, jp or de")
+    parser.add_argument("-lang", "--language", type=str, default="related",
+                        help="related or diff")
+    parser.add_argument("-d", "--dataset", type=str, default="nlproc",
+                        help="nlproc or xed")
     parser.add_argument("-l", "--load", action="store_true",
                         help="load model.pt")
     parser.add_argument("-s", "--save", action="store_true",
@@ -132,28 +135,41 @@ if __name__ == "__main__":
     experiment.log_parameters(hyperparams)
     model_type = args.model
     train_lang = args.language
+    dataset = args.dataset
 
     # Load the GPT2 Tokenizer, add any special token if needed
     special_tokens_dict = {'bos_token': '<BOS>', 'eos_token': '<EOS>'}
 
     if (model_type == "xlmr"):
-        assert train_lang == 'it' or 'jp'
         tokenizer = XLMRobertaTokenizer.from_pretrained('xlm-roberta-base')
         vocab_size = len(tokenizer)
         model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, model_type, device_type).to(device)
 
-        if (train_lang == 'it'):
-            train_file = "Data/it/train.tsv"
-        else: 
-            train_file = "Data/jp/train.tsv"
+        if (dataset == "nlproc"):
+            if (train_lang == 'related'):
+                train_file = "Data/it/train.tsv"
+            else: 
+                train_file = "Data/jp/train.tsv"
 
-        test_file = "Data/de/test.tsv"
+            test_file = "Data/de/test.tsv"
+        else: 
+            if (train_lang == 'related'):
+                train_file = "XED/en-annotated.tsv"
+            else: 
+                train_file = "XED/fi-annotated.tsv"
+
+            test_file = "XED/de-projections.tsv"
     else:
         tokenizer = AutoTokenizer.from_pretrained("bert-base-german-cased")
         vocab_size = len(tokenizer)
         model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, model_type, device_type).to(device)
-        train_file = "Data/de/train.tsv"
-        test_file = "Data/de/test.tsv"
+
+        if (dataset == "nlproc"):
+            train_file = "Data/de/train.tsv"
+            test_file = "Data/de/test.tsv"
+        else: 
+            train_file = "XED/de-projections.tsv"
+            test_file = "XED/de-projections.tsv"
 
     # xlmr_tokenizer = XLMRobertaTokenizer.from_pretrained('xlm-roberta-base')
     # #xlmr_tokenizer.add_special_tokens(special_tokens_dict)
@@ -161,11 +177,12 @@ if __name__ == "__main__":
     # xlmr_model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, device_type).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate'])
+    #optimizer = AdamW(model.parameters(), lr=2e-5, correct_bias=False)
 
-    # # Load the train, test DataLoader NOTE: Parse the data using GPT2 tokenizer
-    train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer)
-    test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer)
+    train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer, dataset)
+    test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer, dataset)
     pad_token = train_dataset.pad_token
+    ## Code to split datasets here!!
     train_loader = DataLoader(train_dataset, batch_size=hyperparams['batch_size'], shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=hyperparams['batch_size'])
                 
