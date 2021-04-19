@@ -2,7 +2,7 @@ from comet_ml import Experiment
 import torch
 import argparse
 from torch import nn, optim
-from transformers import XLMRobertaTokenizer, AutoTokenizer, AdamW
+from transformers import XLMRobertaTokenizer, AutoTokenizer, AdamW, get_linear_schedule_with_warmup
 from torch.utils.data import DataLoader
 #from get_data import load_dataset
 from preprocess import SentimentData
@@ -22,21 +22,23 @@ hyperparams = {
 "batch_size": 16,
 "window_size": 60, # max len is ~ 126 (nlproc xlmr), 71 (xed xlmr), 67 (xed bert), 64 (fi xlmr)
 "learning_rate":0.001,
-"num_epochs":1
+"num_epochs":2
 }
 
-def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, pad_id):
+def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hyperparams, pad_id):
     # Loss 
     if (dataset_name=="nlproc"):
         loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
-        f1_type = 'binary'
     else:
         loss_fn = nn.BCEWithLogitsLoss()
-        f1_type = 'micro'
 
     total_loss = 0
+    losses = []
     total_f1 = 0
     total_word_count = 0
+    correct_predictions = 0
+
+    model = model.train()
 
     with experiment.train():
         for epoch in range(hyperparams["num_epochs"]):
@@ -52,12 +54,13 @@ def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, p
 
                 batch_num += 1
 
-                # Forward + Backward + Optimize
                 optimizer.zero_grad()
                 (logits, probs) = model(inputs, lengths)
 
                 #labels = labels.type_as(logits)
                 round_probs = np.round(probs.cpu().data.numpy())
+                # print(round_probs[:10])
+                # print(labels[:10])
 
                 if (dataset_name == 'nlproc'):
                     labels_for_loss = labels
@@ -65,8 +68,17 @@ def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, p
                     labels_for_loss = labels.type_as(logits)
 
                 loss = loss_fn(logits, labels_for_loss)
-                loss.backward() 
+                losses.append(loss.item())
+                loss.backward()
+
+                # from post
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
+                scheduler.step() 
+                num_correct = np.sum(round_probs == labels.cpu().data.numpy())
+                correct_predictions += num_correct
+                
+                #optimizer.step() <- for regular cross entropy
 
                 word_count = sum(lengths)
                 total_loss += (loss * word_count)
@@ -77,28 +89,38 @@ def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, p
                 else:
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
                 total_f1 += f1
-                print("At batch " + str(batch_num) + " loss is: " + str(loss))
+                print("Batch: " + str(batch_num) + " | loss: " + str(loss.item()) + " | accuracy: " 
+                    + str(num_correct/word_count.item()))
 
-        # Log perplexity to Comet.ml using experiment.log_metric
-        mean_loss = total_loss / total_word_count
-        perplexity = torch.exp(mean_loss).detach()
-        overall_f1 = total_f1/num_in_batch
+        #mean_loss = total_loss / total_word_count
+        mean_loss = np.mean(losses)
+        print("Mean loss: " + str(mean_loss))
+        accuracy = correct_predictions / total_word_count.item()
+        perplexity = np.exp(mean_loss)
+        #perplexity = torch.exp(mean_loss).detach()
+        overall_f1 = total_f1/batch_num
 
         print("perplexity:", perplexity)
         print("F1:", overall_f1)
-        experiment.log_metric("perplexity", perplexity.cpu())
+        print("Accuracy:", accuracy)
+        experiment.log_metric("perplexity", perplexity)
+        experiment.log_metric("accuracy", accuracy)
         experiment.log_metric("F1", overall_f1)
 
 # Test the model on the test set - report perplexity
 def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
     total_loss = 0
+    losses = []
     total_f1 = 0
     total_word_count = 0
+    correct_predictions = 0
 
     if (dataset_name=="nlproc"):
         loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
     else:
         loss_fn = nn.BCEWithLogitsLoss()
+
+    model = model.eval()
 
     with experiment.test():
         batch_num = 0
@@ -122,7 +144,10 @@ def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
                     labels_for_loss = labels.type_as(logits)
 
                 loss = loss_fn(logits, labels_for_loss)
+                losses.append(loss.item())
                 round_probs = np.round(probs.cpu().data.numpy())
+                num_correct = np.sum(round_probs == labels.cpu().data.numpy())
+                correct_predictions += num_correct
 
                 word_count = sum(lengths)
                 total_loss += (loss * word_count)
@@ -134,15 +159,21 @@ def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
                 total_f1 += f1
 
-                print("At batch " + str(batch_num) + " loss is: " + str(loss))
+                print("Batch: " + str(batch_num) + " | loss: " + str(loss.item()) + " | accuracy: " 
+                    + str(num_correct/word_count.item()))
 
-        mean_loss = total_loss / total_word_count
-        perplexity = torch.exp(mean_loss).detach()
-        overall_f1 = total_f1/num_in_batch
+        #mean_loss = total_loss / total_word_count
+        mean_loss = np.mean(losses)
+        #perplexity = torch.exp(mean_loss).detach()
+        perplexity = np.exp(mean_loss)
+        overall_f1 = total_f1/batch_num
+        accuracy = correct_predictions / total_word_count.item()
 
         print("perplexity:", perplexity)
         print("F1:", overall_f1)
-        experiment.log_metric("perplexity", perplexity.cpu())
+        print("Accuracy:", accuracy)
+        experiment.log_metric("perplexity", perplexity)
+        experiment.log_metric("accuracy", accuracy)
         experiment.log_metric("F1", overall_f1)
 
 if __name__ == "__main__":
@@ -211,13 +242,8 @@ if __name__ == "__main__":
             train_file = "XED/de-projections.tsv"
             test_file = "XED/de-projections.tsv"
 
-    # xlmr_tokenizer = XLMRobertaTokenizer.from_pretrained('xlm-roberta-base')
-    # #xlmr_tokenizer.add_special_tokens(special_tokens_dict)
-    # vocab_size = len(xlmr_tokenizer)
-    # xlmr_model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, device_type).to(device)
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate'])
-    #optimizer = AdamW(model.parameters(), lr=2e-5, correct_bias=False)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate'])
+    optimizer = AdamW(model.parameters(), lr=2e-5, correct_bias=False) # from post
 
     train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer, dataset_name)
     test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer, dataset_name)
@@ -225,6 +251,10 @@ if __name__ == "__main__":
     ## Code to split datasets here!!
     train_loader = DataLoader(train_dataset, batch_size=hyperparams['batch_size'], shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=hyperparams['batch_size'])
+
+    # from post
+    total_steps = len(train_dataset) * hyperparams['num_epochs']
+    scheduler = get_linear_schedule_with_warmup(optimizer,num_warmup_steps=0,num_training_steps=total_steps)
                 
     if args.load:
         print("loading model...")
@@ -232,7 +262,7 @@ if __name__ == "__main__":
     if args.train:
         # run train loop here
         print("running fine-tuning loop...")
-        train(model, train_loader, optimizer, experiment, dataset_name, hyperparams, pad_token)
+        train(model, train_loader, optimizer, scheduler, experiment, dataset_name, hyperparams, pad_token)
     if args.save:
         print("saving model...")
         torch.save(model.state_dict(), './model.pt')

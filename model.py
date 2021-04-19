@@ -21,7 +21,6 @@ class Sentiment_Analysis_Model(nn.Module):
         self.dense = nn.Linear(self.model.config.hidden_size, num_classes)
         self.softmax = nn.Softmax(dim=1)
         self.sig = nn.Sigmoid()
-        self.model.eval()
 
     def forward(self, inputs, lengths):
         """
