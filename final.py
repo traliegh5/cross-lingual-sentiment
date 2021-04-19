@@ -146,7 +146,8 @@ def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
 
         mean_loss = total_loss / total_word_count
         perplexity = torch.exp(mean_loss).detach()
-        overall_f1 = total_f1/num_in_batch
+        # overall_f1 = total_f1/num_in_batch
+        overall_f1 = total_f1/batch_num
 
         print("perplexity:", perplexity)
         print("F1:", overall_f1)
