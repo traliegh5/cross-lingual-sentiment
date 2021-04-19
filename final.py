@@ -10,6 +10,7 @@ from model import Sentiment_Analysis_Model
 from tqdm import tqdm
 import numpy as np
 from sklearn.metrics import f1_score
+import gc
 #pip install sentencepiece
 #pip install transformers
 
@@ -27,6 +28,8 @@ hyperparams = {
 
 def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, pad_id):
     # Loss 
+        
+    torch.cuda.empty_cache()
     if (dataset_name=="nlproc"):
         loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
         f1_type = 'binary'
@@ -78,6 +81,11 @@ def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, p
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
                 total_f1 += f1
                 print("At batch " + str(batch_num) + " loss is: " + str(loss))
+                del inputs
+                del labels
+                del lengths
+                gc.collect()
+                torch.cuda.empty_cache()
 
         # Log perplexity to Comet.ml using experiment.log_metric
         mean_loss = total_loss / total_word_count
