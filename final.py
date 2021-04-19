@@ -80,7 +80,7 @@ def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, p
                 else:
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
                 total_f1 += f1
-                print("At batch " + str(batch_num) + " loss is: " + str(loss))
+                # print("At batch " + str(batch_num) + " loss is: " + str(loss))
                 del inputs
                 del labels
                 del lengths
