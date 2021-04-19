@@ -20,7 +20,7 @@ experiment = Experiment(project_name="cross-lingual-sentiment-analysis")
 
 hyperparams = {
 "batch_size": 16,
-"window_size": 100, # max len is ~ 126
+"window_size": 60, # max len is ~ 126 (nlproc xlmr), 71 (xed xlmr), 67 (xed bert), 64 (fi xlmr)
 "learning_rate":0.001,
 "num_epochs":1
 }
@@ -58,8 +58,6 @@ def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, p
 
                 #labels = labels.type_as(logits)
                 round_probs = np.round(probs.cpu().data.numpy())
-                print(probs[:5])
-                print(round_probs[:5])
 
                 if (dataset_name == 'nlproc'):
                     labels_for_loss = labels

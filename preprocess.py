@@ -33,7 +33,11 @@ class SentimentData(Dataset):
         self.labels=[]
         self.tokenizer=tokenizer
         self.pad_token=tokenizer("<pad>")["input_ids"][1]
-        self.cls_token=tokenizer("<cls>")["input_ids"][1]
+
+        # Seems to already be inserting the cls token (0) and sep token (2)
+        # during tokenization
+        self.cls_token=tokenizer("<s>")["input_ids"][1]
+        self.sep_token=tokenizer("</s>")["input_ids"][1]
 
         self.tokens=[]
         self.texts=[]
@@ -51,20 +55,22 @@ class SentimentData(Dataset):
                     self.labels.append(int(line[0]))
                     text = line[1:]
                     self.texts.append(text)
-                    toke=self.tokenizer(text)['input_ids'][:(window_size-1)]
-                    toke.insert(0,self.cls_token)
+                    toke=self.tokenizer(text)['input_ids'][:(window_size)]
+                    #toke.insert(0,self.cls_token)
+                    #toke.append(self.sep_token)
                     self.tokens.append(torch.as_tensor(toke))
                 else:
                     tabbed = line.split("\t")
                     text = tabbed[0]
                     line_labels = tabbed[1]
-                    toke=self.tokenizer(text)['input_ids'][:(window_size-1)]
-                    toke.insert(0,self.cls_token)
+                    toke=self.tokenizer(text)['input_ids'][:(window_size)]
+                    #toke.insert(0,self.cls_token)
+                    #toke.append(self.sep_token)
                     num_emotions = 8
                     prepped_label = [0] * num_emotions
 
                     for i in range(num_emotions):
-                        if str(i) in line_labels:
+                        if str(i+1) in line_labels:
                             prepped_label[i] = 1
 
                     self.labels.append(prepped_label)
