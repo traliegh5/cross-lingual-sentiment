@@ -10,6 +10,7 @@ from model import Sentiment_Analysis_Model
 from tqdm import tqdm
 import numpy as np
 from sklearn.metrics import f1_score
+import gc
 #pip install sentencepiece
 #pip install transformers
 
@@ -27,6 +28,8 @@ hyperparams = {
 
 def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hyperparams, pad_id):
     # Loss 
+        
+    torch.cuda.empty_cache()
     if (dataset_name=="nlproc"):
         loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
     else:
@@ -43,7 +46,7 @@ def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hype
     with experiment.train():
         for epoch in range(hyperparams["num_epochs"]):
             batch_num = 0
-            for (inputs, labels, lengths) in train_loader:
+            for (inputs, labels, lengths) in tqdm(train_loader):
                 num_in_batch = len(lengths)
                 if (num_in_batch < hyperparams['batch_size']):
                     continue
@@ -89,8 +92,16 @@ def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hype
                 else:
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
                 total_f1 += f1
+
                 print("Batch: " + str(batch_num) + " | loss: " + str(loss.item()) + " | accuracy: " 
                     + str(num_correct/word_count.item()))
+
+                # print("At batch " + str(batch_num) + " loss is: " + str(loss))
+                del inputs
+                del labels
+                del lengths
+                gc.collect()
+                torch.cuda.empty_cache()
 
         #mean_loss = total_loss / total_word_count
         mean_loss = np.mean(losses)
@@ -125,7 +136,7 @@ def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
     with experiment.test():
         batch_num = 0
         with torch.no_grad():
-            for (inputs, labels, lengths) in test_loader:
+            for (inputs, labels, lengths) in tqdm(test_loader):
                 num_in_batch = len(lengths)
                 if (num_in_batch < hyperparams['batch_size']):
                     continue
@@ -168,6 +179,11 @@ def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
         perplexity = np.exp(mean_loss)
         overall_f1 = total_f1/batch_num
         accuracy = correct_predictions / total_word_count.item()
+
+        mean_loss = total_loss / total_word_count
+        perplexity = torch.exp(mean_loss).detach()
+        # overall_f1 = total_f1/num_in_batch
+        overall_f1 = total_f1/batch_num
 
         print("perplexity:", perplexity)
         print("F1:", overall_f1)
