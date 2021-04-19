@@ -44,7 +44,7 @@ def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, p
     with experiment.train():
         for epoch in range(hyperparams["num_epochs"]):
             batch_num = 0
-            for (inputs, labels, lengths) in train_loader:
+            for (inputs, labels, lengths) in tqdm(train_loader):
                 num_in_batch = len(lengths)
                 if (num_in_batch < hyperparams['batch_size']):
                     continue
@@ -111,7 +111,7 @@ def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
     with experiment.test():
         batch_num = 0
         with torch.no_grad():
-            for (inputs, labels, lengths) in test_loader:
+            for (inputs, labels, lengths) in tqdm(test_loader):
                 num_in_batch = len(lengths)
                 if (num_in_batch < hyperparams['batch_size']):
                     continue
