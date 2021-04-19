@@ -4,7 +4,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 
 class SentimentData(Dataset):
-    def __init__(self, input_file,window_size, tokenizer, dataset):
+    def __init__(self, input_file,window_size, tokenizer, dataset_name):
         """
         Read and parse the translation dataset line by line. Make sure you
         separate them on tab to get the original sentence and the target
@@ -47,7 +47,7 @@ class SentimentData(Dataset):
                 if not line:
                     break
 
-                if (dataset == "nlproc"):
+                if (dataset_name == "nlproc"):
                     self.labels.append(int(line[0]))
                     text = line[1:]
                     self.texts.append(text)

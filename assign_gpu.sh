@@ -2,4 +2,4 @@
 
 source /course/cs146/public/cs146-gpu-env/bin/activate
 
-time python final.py -Tt -m xlmr -lang it
+time python final.py -Tt -m xlmr -d xed -lang related

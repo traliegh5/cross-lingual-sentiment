@@ -3,7 +3,7 @@ import torch.nn as nn
 from transformers import XLMRobertaModel, AutoModel
 
 class Sentiment_Analysis_Model(nn.Module):
-    def __init__(self, window_size, vocab_size, model_type, device_type):
+    def __init__(self, window_size, vocab_size, model_type, dataset_name, num_classes, device_type):
         super(Sentiment_Analysis_Model, self).__init__()
         '''
         
@@ -15,10 +15,12 @@ class Sentiment_Analysis_Model(nn.Module):
             self.model = XLMRobertaModel.from_pretrained('xlm-roberta-base')
         else: 
             self.model = AutoModel.from_pretrained("bert-base-german-cased")
+        self.dataset_name = dataset_name
         self.model.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(p=0.3)
-        self.dense = nn.Linear(self.model.config.hidden_size, 2)
+        self.dense = nn.Linear(self.model.config.hidden_size, num_classes)
         self.softmax = nn.Softmax(dim=1)
+        self.sig = nn.Sigmoid()
         self.model.eval()
 
     def forward(self, inputs, lengths):
@@ -34,7 +36,12 @@ class Sentiment_Analysis_Model(nn.Module):
         dropout_output = self.dropout(pooler_output)
         dense_output = self.dense(dropout_output)
 
-        return (dense_output, self.softmax(dense_output))
+        if (self.dataset_name == "nlproc"):
+            to_return = self.softmax(dense_output)
+        else: 
+            to_return = self.sig(dense_output)
+
+        return (dense_output, to_return)
 
 def get_attention_mask(seq_len, lengths, device_type):
     num_in_batch = len(lengths)

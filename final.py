@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from preprocess import SentimentData
 from model import Sentiment_Analysis_Model
 from tqdm import tqdm
+import numpy as np
 from sklearn.metrics import f1_score
 #pip install sentencepiece
 #pip install transformers
@@ -19,14 +20,19 @@ experiment = Experiment(project_name="cross-lingual-sentiment-analysis")
 
 hyperparams = {
 "batch_size": 16,
-"window_size": 50, # max len is ~ 126
+"window_size": 100, # max len is ~ 126
 "learning_rate":0.001,
 "num_epochs":1
 }
 
-def train(model, train_loader, optimizer,experiment,hyperparams, pad_id):
+def train(model, train_loader, optimizer,experiment, dataset_name,hyperparams, pad_id):
     # Loss 
-    loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
+    if (dataset_name=="nlproc"):
+        loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
+        f1_type = 'binary'
+    else:
+        loss_fn = nn.BCEWithLogitsLoss()
+        f1_type = 'micro'
 
     total_loss = 0
     total_f1 = 0
@@ -50,7 +56,17 @@ def train(model, train_loader, optimizer,experiment,hyperparams, pad_id):
                 optimizer.zero_grad()
                 (logits, probs) = model(inputs, lengths)
 
-                loss = loss_fn(logits, labels)
+                #labels = labels.type_as(logits)
+                round_probs = np.round(probs.cpu().data.numpy())
+                print(probs[:5])
+                print(round_probs[:5])
+
+                if (dataset_name == 'nlproc'):
+                    labels_for_loss = labels
+                else:
+                    labels_for_loss = labels.type_as(logits)
+
+                loss = loss_fn(logits, labels_for_loss)
                 loss.backward() 
                 optimizer.step()
 
@@ -58,7 +74,10 @@ def train(model, train_loader, optimizer,experiment,hyperparams, pad_id):
                 total_loss += (loss * word_count)
                 total_word_count += word_count
                 indices = torch.max(probs, 1)[1].cpu().data.numpy()
-                f1 = f1_score(labels.cpu().data.numpy(), indices, average='binary')
+                if (dataset_name == "nlproc"):
+                    f1 = f1_score(labels.cpu().data.numpy(), indices, average='binary')
+                else:
+                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
                 total_f1 += f1
                 print("At batch " + str(batch_num) + " loss is: " + str(loss))
 
@@ -73,11 +92,15 @@ def train(model, train_loader, optimizer,experiment,hyperparams, pad_id):
         experiment.log_metric("F1", overall_f1)
 
 # Test the model on the test set - report perplexity
-def test(model, test_loader, experiment, hyperparams, pad_id):
-    loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
+def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
     total_loss = 0
     total_f1 = 0
     total_word_count = 0
+
+    if (dataset_name=="nlproc"):
+        loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
+    else:
+        loss_fn = nn.BCEWithLogitsLoss()
 
     with experiment.test():
         batch_num = 0
@@ -94,13 +117,25 @@ def test(model, test_loader, experiment, hyperparams, pad_id):
                 batch_num += 1
 
                 (logits, probs) = model(inputs, lengths)
-                loss = loss_fn(logits, labels)
+
+                if (dataset_name == 'nlproc'):
+                    labels_for_loss = labels
+                else:
+                    labels_for_loss = labels.type_as(logits)
+
+                loss = loss_fn(logits, labels_for_loss)
+                round_probs = np.round(probs.cpu().data.numpy())
 
                 word_count = sum(lengths)
                 total_loss += (loss * word_count)
                 total_word_count += word_count
                 indices = torch.max(probs, 1)[1].cpu().data.numpy()
-                total_f1 += f1_score(labels.cpu().data.numpy(), indices, average='binary')
+                if (dataset_name == "nlproc"):
+                    f1 = f1_score(labels.cpu().data.numpy(), indices, average='binary')
+                else:
+                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
+                total_f1 += f1
+
                 print("At batch " + str(batch_num) + " loss is: " + str(loss))
 
         mean_loss = total_loss / total_word_count
@@ -135,7 +170,12 @@ if __name__ == "__main__":
     experiment.log_parameters(hyperparams)
     model_type = args.model
     train_lang = args.language
-    dataset = args.dataset
+    dataset_name = args.dataset
+
+    if (dataset_name == "nlproc"):
+        num_classes = 2
+    else: 
+        num_classes = 8 
 
     # Load the GPT2 Tokenizer, add any special token if needed
     special_tokens_dict = {'bos_token': '<BOS>', 'eos_token': '<EOS>'}
@@ -143,9 +183,10 @@ if __name__ == "__main__":
     if (model_type == "xlmr"):
         tokenizer = XLMRobertaTokenizer.from_pretrained('xlm-roberta-base')
         vocab_size = len(tokenizer)
-        model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, model_type, device_type).to(device)
+        model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, model_type, 
+            dataset_name, num_classes, device_type).to(device)
 
-        if (dataset == "nlproc"):
+        if (dataset_name == "nlproc"):
             if (train_lang == 'related'):
                 train_file = "Data/it/train.tsv"
             else: 
@@ -162,9 +203,10 @@ if __name__ == "__main__":
     else:
         tokenizer = AutoTokenizer.from_pretrained("bert-base-german-cased")
         vocab_size = len(tokenizer)
-        model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, model_type, device_type).to(device)
+        model = Sentiment_Analysis_Model(hyperparams['window_size'], vocab_size, model_type, 
+            dataset_name, num_classes, device_type).to(device)
 
-        if (dataset == "nlproc"):
+        if (dataset_name == "nlproc"):
             train_file = "Data/de/train.tsv"
             test_file = "Data/de/test.tsv"
         else: 
@@ -179,8 +221,8 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate'])
     #optimizer = AdamW(model.parameters(), lr=2e-5, correct_bias=False)
 
-    train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer, dataset)
-    test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer, dataset)
+    train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer, dataset_name)
+    test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer, dataset_name)
     pad_token = train_dataset.pad_token
     ## Code to split datasets here!!
     train_loader = DataLoader(train_dataset, batch_size=hyperparams['batch_size'], shuffle=True)
@@ -192,11 +234,11 @@ if __name__ == "__main__":
     if args.train:
         # run train loop here
         print("running fine-tuning loop...")
-        train(model, train_loader, optimizer, experiment, hyperparams, pad_token)
+        train(model, train_loader, optimizer, experiment, dataset_name, hyperparams, pad_token)
     if args.save:
         print("saving model...")
         torch.save(model.state_dict(), './model.pt')
     if args.test:
         # run test loop here
         print("running testing loop...")
-        test(model, test_loader, experiment,hyperparams, pad_token)
+        test(model, test_loader, experiment, dataset_name, hyperparams, pad_token)
