@@ -269,6 +269,7 @@ if __name__ == "__main__":
     
     train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer, dataset_name)
     test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer, dataset_name)
+    pad_token = train_dataset.pad_token
     if (dataset_name!= "nlproc") and (model_type!="xlmr"):
         length=train_dataset.__len__()
         big=int(.9*length)
@@ -279,7 +280,7 @@ if __name__ == "__main__":
     # test_num = dataset_length - train_num
     # train_dataset, test_dataset = random_split(translation_dataset, [train_num, test_num])
 
-    pad_token = train_dataset.pad_token
+    
     ## Code to split datasets here!!
     train_loader = DataLoader(train_dataset, batch_size=hyperparams['batch_size'], shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=hyperparams['batch_size'])
