@@ -48,8 +48,8 @@ def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hype
             batch_num = 0
             for (inputs, labels, lengths) in tqdm(train_loader):
                 num_in_batch = len(lengths)
-                if (num_in_batch < hyperparams['batch_size']):
-                    continue
+                # if (num_in_batch < hyperparams['batch_size']):
+                #     continue
 
                 inputs = inputs.to(device)
                 labels = labels.to(device)
@@ -138,8 +138,8 @@ def test(model, test_loader, experiment, dataset_name, hyperparams, pad_id):
         with torch.no_grad():
             for (inputs, labels, lengths) in tqdm(test_loader):
                 num_in_batch = len(lengths)
-                if (num_in_batch < hyperparams['batch_size']):
-                    continue
+                # if (num_in_batch < hyperparams['batch_size']):
+                #     continue
 
                 inputs = inputs.to(device)
                 labels = labels.to(device)
@@ -263,6 +263,12 @@ if __name__ == "__main__":
 
     train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer, dataset_name)
     test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer, dataset_name)
+
+    # For splitting
+    # train_num = int(0.9 * dataset_length)
+    # test_num = dataset_length - train_num
+    # train_dataset, test_dataset = random_split(translation_dataset, [train_num, test_num])
+
     pad_token = train_dataset.pad_token
     ## Code to split datasets here!!
     train_loader = DataLoader(train_dataset, batch_size=hyperparams['batch_size'], shuffle=True)

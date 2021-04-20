@@ -30,7 +30,8 @@ class Sentiment_Analysis_Model(nn.Module):
 
         :return: the logits
         """
-        attention_mask = get_attention_mask(self.window_size, lengths, self.device_type)
+        seq_len = list(inputs.size())[1]
+        attention_mask = get_attention_mask(seq_len, lengths, self.device_type)
         (_, pooler_output) = self.model(inputs,attention_mask=attention_mask).to_tuple()
         dropout_output = self.dropout(pooler_output)
         dense_output = self.dense(dropout_output)
