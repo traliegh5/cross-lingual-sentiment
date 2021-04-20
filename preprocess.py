@@ -4,7 +4,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 def convert_to_binary(label):
     # anger:1, anticipation:2, disgust:3, fear:4, joy:5, sadness:6, surprise:7, trust:8, with neutral:0
-    label=np.asarray(label)
+    label=torch.astensor(label)
     pos_ind=[1,4,7]
     neg_ind=[0,2,3,5]
     pos=label[pos_ind]
