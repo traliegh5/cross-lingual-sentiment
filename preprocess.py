@@ -93,6 +93,7 @@ class SentimentData(Dataset):
                         sentiment=convert_to_binary(prepped_label)
                         if sentiment==None:
                             print("Throw this line out")
+                            print(prepped_label)
                             continue
                         else:
                             self.labels.append(sentiment)
