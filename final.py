@@ -40,6 +40,7 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes,hyper
     total_f1 = 0
     total_word_count = 0
     correct_predictions = 0
+    num_examples = 0
 
     model = model.train()
 
@@ -48,6 +49,7 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes,hyper
             batch_num = 0
             for (inputs, labels, lengths) in tqdm(train_loader):
                 num_in_batch = len(lengths)
+                num_examples += num_in_batch
 
                 inputs = inputs.to(device)
                 labels = labels.to(device)
@@ -110,7 +112,7 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes,hyper
         #mean_loss = total_loss / total_word_count
         mean_loss = np.mean(losses)
         print("Mean loss: " + str(mean_loss))
-        accuracy = correct_predictions / batch_num
+        accuracy = correct_predictions / num_examples
         perplexity = np.exp(mean_loss)
         #perplexity = torch.exp(mean_loss).detach()
         overall_f1 = total_f1/batch_num
@@ -129,6 +131,7 @@ def test(model, test_loader, experiment, num_classes, hyperparams, pad_id):
     total_f1 = 0
     total_word_count = 0
     correct_predictions = 0
+    num_examples = 0
 
     if (num_classes == 2):
         loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
@@ -142,6 +145,7 @@ def test(model, test_loader, experiment, num_classes, hyperparams, pad_id):
         with torch.no_grad():
             for (inputs, labels, lengths) in tqdm(test_loader):
                 num_in_batch = len(lengths)
+                num_examples += num_in_batch
 
                 inputs = inputs.to(device)
                 labels = labels.to(device)
@@ -183,7 +187,7 @@ def test(model, test_loader, experiment, num_classes, hyperparams, pad_id):
         #perplexity = torch.exp(mean_loss).detach()
         perplexity = np.exp(mean_loss)
         overall_f1 = total_f1/batch_num
-        accuracy = correct_predictions / batch_num
+        accuracy = correct_predictions / num_examples
 
         mean_loss = total_loss / total_word_count
         perplexity = torch.exp(mean_loss).detach()
