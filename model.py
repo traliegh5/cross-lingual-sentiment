@@ -3,19 +3,18 @@ import torch.nn as nn
 from transformers import XLMRobertaModel, AutoModel
 
 class Sentiment_Analysis_Model(nn.Module):
-    def __init__(self, window_size, vocab_size, model_type, dataset_name, num_classes, device_type):
+    def __init__(self, vocab_size, model_type, num_classes, device_type):
         super(Sentiment_Analysis_Model, self).__init__()
         '''
         
         '''
-        self.window_size = window_size
         self.device_type = device_type
         #self.xlmr_model = XLMRobertaModel.from_pretrained('xlm-roberta-base')
         if (model_type == 'xlmr'):
             self.model = XLMRobertaModel.from_pretrained('xlm-roberta-base')
         else: 
             self.model = AutoModel.from_pretrained("bert-base-german-cased")
-        self.dataset_name = dataset_name
+        self.num_classes = num_classes
         self.model.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(p=0.3)
         self.dense = nn.Linear(self.model.config.hidden_size, num_classes)
@@ -36,7 +35,7 @@ class Sentiment_Analysis_Model(nn.Module):
         dropout_output = self.dropout(pooler_output)
         dense_output = self.dense(dropout_output)
 
-        if (self.dataset_name == "nlproc"):
+        if (self.num_classes == 2):
             to_return = self.softmax(dense_output)
         else: 
             to_return = self.sig(dense_output)

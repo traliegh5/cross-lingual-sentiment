@@ -18,8 +18,9 @@ def convert_to_binary(label):
     else:
         val=None
     return val 
+
 class SentimentData(Dataset):
-    def __init__(self, input_file,window_size, tokenizer, dataset_name,binary=False):
+    def __init__(self, input_file, tokenizer, dataset_name, num_classes):
         """
         Read and parse the translation dataset line by line. Make sure you
         separate them on tab to get the original sentence and the target
@@ -42,8 +43,10 @@ class SentimentData(Dataset):
         #       and make sure you pad your inputs.
 
         # Hint: remember to add start and pad to create inputs and labels
-        
-        self.binary=binary
+        self.binary = False
+        if (dataset_name != "nlproc") & (num_classes == 2):
+            self.binary = True
+
         self.lengths=[]
         self.labels=[]
         self.tokenizer=tokenizer
@@ -90,10 +93,11 @@ class SentimentData(Dataset):
                         if str(i+1) in line_labels:
                             prepped_label[i] = 1
                     if self.binary:
+
                         sentiment=convert_to_binary(prepped_label)
                         if sentiment==None:
-                            print("Throw this line out")
-                            print(prepped_label)
+                            #print("Throw this line out")
+                            #print(prepped_label)
                             continue
                         else:
                             self.labels.append(sentiment)
@@ -117,15 +121,15 @@ class SentimentData(Dataset):
        
         self.labels=torch.as_tensor(self.labels)
         self.tokens=pad_sequence(self.tokens,batch_first=True,padding_value=self.pad_token)
-        print("Size of tokens: " + str(self.tokens.size()))
-        print("Size of labels: " + str(self.labels.size()))
-        print("Size of lengths: " + str(len(self.lengths)))
-        print("Some tokens")
-        print(self.tokens[:5])
-        print("Some labels")
-        print(self.labels[:5])
-        print("Some lengths")
-        print(self.lengths[:5])
+        # print("Size of tokens: " + str(self.tokens.size()))
+        # print("Size of labels: " + str(self.labels.size()))
+        # print("Size of lengths: " + str(len(self.lengths)))
+        # print("Some tokens")
+        # print(self.tokens[:5])
+        # print("Some labels")
+        # print(self.labels[:5])
+        # print("Some lengths")
+        # print(self.lengths[:5])
         # print(max(self.lengths))
         # self.masks=pad_sequence(self.masks,batch_first=True,padding_value=padding_value)
 
