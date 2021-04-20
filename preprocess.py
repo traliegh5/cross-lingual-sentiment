@@ -55,7 +55,8 @@ class SentimentData(Dataset):
                     self.labels.append(int(line[0]))
                     text = line[1:]
                     self.texts.append(text)
-                    toke=self.tokenizer(text)['input_ids'][:(window_size)]
+                    # toke=self.tokenizer(text)['input_ids'][:(window_size)]
+                    toke=self.tokenizer(text)['input_ids']
                     #toke.insert(0,self.cls_token)
                     #toke.append(self.sep_token)
                     self.tokens.append(torch.as_tensor(toke))
@@ -63,7 +64,8 @@ class SentimentData(Dataset):
                     tabbed = line.split("\t")
                     text = tabbed[0]
                     line_labels = tabbed[1]
-                    toke=self.tokenizer(text)['input_ids'][:(window_size)]
+                    # toke=self.tokenizer(text)['input_ids'][:(window_size)]
+                    toke=self.tokenizer(text)['input_ids']
                     #toke.insert(0,self.cls_token)
                     #toke.append(self.sep_token)
                     num_emotions = 8

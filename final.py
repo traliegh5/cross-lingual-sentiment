@@ -78,8 +78,8 @@ def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hype
                 nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
                 scheduler.step() 
-                num_correct = np.sum(round_probs == labels.cpu().data.numpy())
-                correct_predictions += num_correct
+               
+                
                 
                 #optimizer.step() <- for regular cross entropy
 
@@ -89,9 +89,12 @@ def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hype
                 indices = torch.max(probs, 1)[1].cpu().data.numpy()
                 if (dataset_name == "nlproc"):
                     f1 = f1_score(labels.cpu().data.numpy(), indices, average='binary')
+                     num_correct = np.sum(indices == labels.cpu().data.numpy())
                 else:
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='micro')
+                     num_correct = np.sum(round_probs == labels.cpu().data.numpy())
                 total_f1 += f1
+                correct_predictions += num_correct
 
                 print("Batch: " + str(batch_num) + " | loss: " + str(loss.item()) + " | accuracy: " 
                     + str(num_correct/word_count.item()))
