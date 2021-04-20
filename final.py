@@ -3,7 +3,7 @@ import torch
 import argparse
 from torch import nn, optim
 from transformers import XLMRobertaTokenizer, AutoTokenizer, AdamW, get_linear_schedule_with_warmup
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader,random_split
 #from get_data import load_dataset
 from preprocess import SentimentData
 from model import Sentiment_Analysis_Model
@@ -266,10 +266,14 @@ if __name__ == "__main__":
 
     #optimizer = torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate'])
     optimizer = AdamW(model.parameters(), lr=2e-5, correct_bias=False) # from post
-
+    
     train_dataset = SentimentData(train_file, hyperparams['window_size'], tokenizer, dataset_name)
     test_dataset = SentimentData(test_file, hyperparams['window_size'], tokenizer, dataset_name)
-
+    if (dataset_name!= "nlproc") and (model_type!="xlmr"):
+        length=train_dataset.__len__()
+        big=int(.9*length)
+        splits=[big,length-big]
+        train_dataset,test_dataset=random_split(train_dataset,splits)
     # For splitting
     # train_num = int(0.9 * dataset_length)
     # test_num = dataset_length - train_num
