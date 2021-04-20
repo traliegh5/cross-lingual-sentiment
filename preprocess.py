@@ -2,9 +2,23 @@ from transformers import XLMRobertaTokenizer
 from torch.utils.data import Dataset, DataLoader
 import torch
 from torch.nn.utils.rnn import pad_sequence
-
+def convert_to_binary(label):
+    # anger:1, anticipation:2, disgust:3, fear:4, joy:5, sadness:6, surprise:7, trust:8, with neutral:0
+    pos_ind=[1,4,7]
+    neg_ind=[0,2,3,5]
+    pos=label[pos_ind]
+    neg=label[neg_ind]
+    avg_pos=sum(pos)/float(len(pos))
+    avg_neg=sum(neg)/float(len(neg))
+    if avg_neg>avg_pos:
+        val=0
+    elif avg_pos>avg_neg:
+        val=1
+    else:
+        val=None
+    return val 
 class SentimentData(Dataset):
-    def __init__(self, input_file,window_size, tokenizer, dataset_name):
+    def __init__(self, input_file,window_size, tokenizer, dataset_name,binary=True):
         """
         Read and parse the translation dataset line by line. Make sure you
         separate them on tab to get the original sentence and the target
@@ -28,7 +42,7 @@ class SentimentData(Dataset):
 
         # Hint: remember to add start and pad to create inputs and labels
         
-        
+        self.binary=binary
         self.lengths=[]
         self.labels=[]
         self.tokenizer=tokenizer
@@ -74,8 +88,15 @@ class SentimentData(Dataset):
                     for i in range(num_emotions):
                         if str(i+1) in line_labels:
                             prepped_label[i] = 1
-
-                    self.labels.append(prepped_label)
+                    if self.binary:
+                        sentiment=convert_to_binary(prepped_label)
+                        if sentiment==None:
+                            print("Throw this line out")
+                            continue
+                        else:
+                            self.labels.append(sentiment)
+                    else:
+                        self.labels.append(prepped_label)
                     self.texts.append(text)
                     
                     self.tokens.append(torch.as_tensor(toke))
@@ -132,8 +153,9 @@ class SentimentData(Dataset):
 
 if __name__ == "__main__":
     tokenizer=XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
-    german_train_set=SentimentData("Data/de/train.tsv",10,tokenizer)
-    german_test_set=SentimentData("Data/de/test.tsv",10,tokenizer)
-    japanese_train_set=SentimentData("Data/it/train.tsv",10,tokenizer)
-    item=japanese_train_set.__getitem__(0)
-    print(item["input"],item["label"])
+    binary_dataset=SentimentData("./XED/en-annotated.tsv",10,tokenizer,"XED",True)
+    xed_dataset=SentimentData("./XED/en-annotated.tsv",10,tokenizer,"XED",False)
+
+    print(binary_dataset.__len__())
+    print(xed_dataset.__len__())
+
