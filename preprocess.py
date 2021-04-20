@@ -19,7 +19,7 @@ def convert_to_binary(label):
         val=None
     return val 
 class SentimentData(Dataset):
-    def __init__(self, input_file,window_size, tokenizer, dataset_name,binary=True):
+    def __init__(self, input_file,window_size, tokenizer, dataset_name,binary=False):
         """
         Read and parse the translation dataset line by line. Make sure you
         separate them on tab to get the original sentence and the target
