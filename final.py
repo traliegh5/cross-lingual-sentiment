@@ -23,7 +23,7 @@ hyperparams = {
 "batch_size": 16,
 "window_size": 60, # max len is ~ 126 (nlproc xlmr), 71 (xed xlmr), 67 (xed bert), 64 (fi xlmr)
 "learning_rate":0.001,
-"num_epochs":2
+"num_epochs":10
 }
 
 def train(model, train_loader, optimizer,scheduler,experiment, dataset_name,hyperparams, pad_id):
