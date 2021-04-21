@@ -30,8 +30,10 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
     # Loss 
         
     torch.cuda.empty_cache()
-    
-    loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    if (num_classes==2):
+        loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
+    else:
+        loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     total_loss = 0
     losses = []
@@ -39,7 +41,6 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
     total_word_count = 0
     correct_predictions = 0
     num_examples = 0
-    total_batches = 0
 
     model = model.train()
 
@@ -55,7 +56,6 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
                 lengths = lengths.to(device)
 
                 batch_num += 1
-                total_batches += 1
 
                 optimizer.zero_grad()
                 (logits, probs) = model(inputs, lengths)
@@ -65,7 +65,10 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
                 #print(round_probs)
                 # print(labels[:10])
 
-                labels_for_loss = labels.type_as(logits)
+                if (num_classes == 2):
+                    labels_for_loss = labels
+                else:
+                    labels_for_loss = labels.type_as(logits)
 
                 loss = loss_fn(logits, labels_for_loss)
                 losses.append(loss.item())
@@ -80,23 +83,22 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
                 word_count = sum(lengths)
                 total_loss += (loss * word_count)
                 total_word_count += word_count
-
-                if (num_classes == 1):
-                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
+                indices = torch.max(probs, 1)[1].cpu().data.numpy()
+                if (num_classes == 2):
+                    f1 = f1_score(labels.cpu().data.numpy(), indices, average='binary',zero_division=1)
+                    num_correct = np.sum(indices == labels.cpu().data.numpy())
+                    accuracy_out_of = num_in_batch
+                    print("Num correct: " + str(num_correct))
+                    print(indices)
+                    print(labels)
                 else:
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
-
-                # print("Round probs")
-                # print(round_probs)
-                # print("Labels")
-                # print(labels)
-                num_correct = np.sum((round_probs == labels.cpu().data.numpy()).all(1))
-                #num_correct = np.sum(round_probs == labels.cpu().data.numpy())
-                accuracy_out_of = num_in_batch
-                print("Num correct: " + str(num_correct))
-                print("F1: " + str(f1))
-                # print(round_probs)
-                # print(labels.cpu().data.numpy())
+                    num_correct = np.sum((round_probs == labels.cpu().data.numpy()).all(1))
+                    #num_correct = np.sum(round_probs == labels.cpu().data.numpy())
+                    accuracy_out_of = num_in_batch
+                    # print("Num correct: " + str(num_correct))
+                    # print(round_probs)
+                    # print(labels.cpu().data.numpy())
 
                 total_f1 += f1
                 correct_predictions += num_correct
@@ -117,7 +119,7 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
         accuracy = correct_predictions / num_examples
         perplexity = np.exp(mean_loss)
         #perplexity = torch.exp(mean_loss).detach()
-        overall_f1 = total_f1/total_batches
+        overall_f1 = total_f1/batch_num
 
         print("perplexity:", perplexity)
         print("F1:", overall_f1)
@@ -155,35 +157,32 @@ def test(model, test_loader, experiment, num_classes, pos_weight, hyperparams, p
 
                 batch_num += 1
 
-                optimizer.zero_grad()
                 (logits, probs) = model(inputs, lengths)
 
-                #labels = labels.type_as(logits)
-                round_probs = np.round(probs.cpu().data.numpy())
-                #print(round_probs)
-                # print(labels[:10])
-
-                labels_for_loss = labels.type_as(logits)
+                if (num_classes == 2):
+                    labels_for_loss = labels
+                else:
+                    labels_for_loss = labels.type_as(logits)
 
                 loss = loss_fn(logits, labels_for_loss)
                 losses.append(loss.item())
-
+                round_probs = np.round(probs.cpu().data.numpy())
+                
                 word_count = sum(lengths)
                 total_loss += (loss * word_count)
                 total_word_count += word_count
-
-                if (num_classes == 1):
-                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
+                indices = torch.max(probs, 1)[1].cpu().data.numpy()
+                
+                if (num_classes == 2):
+                    f1 = f1_score(labels.cpu().data.numpy(), indices, average='binary',zero_division=1)
+                    num_correct = np.sum(indices == labels.cpu().data.numpy())
+                    accuracy_out_of = num_in_batch
                 else:
                     f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
-
-                num_correct = np.sum((round_probs == labels.cpu().data.numpy()).all(1))
-                #num_correct = np.sum(round_probs == labels.cpu().data.numpy())
-                accuracy_out_of = num_in_batch
-                print("Num correct: " + str(num_correct))
-                print("F1: " + str(f1))
-                # print(round_probs)
-                # print(labels.cpu().data.numpy())
+                    #num_correct = np.sum(round_probs == labels.cpu().data.numpy())
+                    #accuracy_out_of = num_in_batch*8
+                    num_correct = np.sum((round_probs == labels.cpu().data.numpy()).all(1))
+                    accuracy_out_of = num_in_batch
 
                 total_f1 += f1
                 correct_predictions += num_correct
@@ -193,16 +192,20 @@ def test(model, test_loader, experiment, num_classes, pos_weight, hyperparams, p
 
         #mean_loss = total_loss / total_word_count
         mean_loss = np.mean(losses)
-        print("Mean loss: " + str(mean_loss))
-        accuracy = correct_predictions / num_examples
-        perplexity = np.exp(mean_loss)
         #perplexity = torch.exp(mean_loss).detach()
+        perplexity = np.exp(mean_loss)
+        overall_f1 = total_f1/batch_num
+        accuracy = correct_predictions / num_examples
+
+        mean_loss = total_loss / total_word_count
+        perplexity = torch.exp(mean_loss).detach()
+        # overall_f1 = total_f1/num_in_batch
         overall_f1 = total_f1/batch_num
 
         print("perplexity:", perplexity)
         print("F1:", overall_f1)
         print("Accuracy:", accuracy)
-        experiment.log_metric("perplexity", perplexity)
+        experiment.log_metric("perplexity", perplexity.cpu())
         experiment.log_metric("accuracy", accuracy)
         experiment.log_metric("F1", overall_f1)
 
@@ -213,7 +216,7 @@ if __name__ == "__main__":
     parser.add_argument("-lang", "--language", type=str, default="related",
                         help="related or diff")
     parser.add_argument("-n", "--num_classes", type=str, default="8",
-                        help="1 or 8")
+                        help="2 or 8")
     parser.add_argument("-l", "--load", action="store_true",
                         help="load model.pt")
     parser.add_argument("-s", "--save", action="store_true",
@@ -231,21 +234,34 @@ if __name__ == "__main__":
 
     dataset_name = "xed"
 
+    binary = True
+
     if (model_type == "xlmr"):
         tokenizer = XLMRobertaTokenizer.from_pretrained('xlm-roberta-base')
         
-        if (train_lang == 'related'):
-            train_file = "XED/en-annotated.tsv"
-        else: 
-            train_file = "XED/fi-annotated.tsv"
+        if (dataset_name == "nlproc"):
+            if (train_lang == 'related'):
+                train_file = "Data/it/train.tsv"
+            else: 
+                train_file = "Data/jp/train.tsv"
 
-        test_file = "XED/de-projections.tsv"
-            
+            test_file = "Data/de/test.tsv"
+        else: 
+            if (train_lang == 'related'):
+                train_file = "XED/en-annotated.tsv"
+            else: 
+                train_file = "XED/fi-annotated.tsv"
+
+            test_file = "XED/de-projections.tsv"
     else:
         tokenizer = AutoTokenizer.from_pretrained("bert-base-german-cased")
 
-        train_file = "XED/de-projections.tsv"
-        test_file = "XED/de-projections.tsv"    
+        if (dataset_name == "nlproc"):
+            train_file = "Data/de/train.tsv"
+            test_file = "Data/de/test.tsv"
+        else: 
+            train_file = "XED/de-projections.tsv"
+            test_file = "XED/de-projections.tsv"
 
     vocab_size = len(tokenizer)
     model = Sentiment_Analysis_Model(vocab_size, model_type, num_classes, device_type).to(device)
@@ -255,8 +271,8 @@ if __name__ == "__main__":
     
     train_dataset = SentimentData(train_file, tokenizer, dataset_name, num_classes)
     test_dataset = SentimentData(test_file, tokenizer, dataset_name, num_classes)
-    train_pos_weights = train_dataset.pos_weights.to(device)
-    test_pos_weights = test_dataset.pos_weights.to(device)
+    train_pos_weights = train_dataset.pos_weights
+    test_pos_weights = test_dataset.pos_weights
     pad_token = train_dataset.pad_token
 
     # if (dataset_name!= "nlproc") and (model_type!="xlmr"):

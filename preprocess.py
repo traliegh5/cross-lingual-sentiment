@@ -2,6 +2,8 @@ from transformers import XLMRobertaTokenizer
 from torch.utils.data import Dataset, DataLoader
 import torch
 from torch.nn.utils.rnn import pad_sequence
+import numpy as np
+
 def convert_to_binary(label):
     # anger:1, anticipation:2, disgust:3, fear:4, joy:5, sadness:6, surprise:7, trust:8, with neutral:0
     label=torch.as_tensor(label)
@@ -18,6 +20,14 @@ def convert_to_binary(label):
     else:
         val=None
     return val 
+
+def calculate_pos_weights(class_counts, num_examples):
+    pos_weights = np.ones_like(class_counts)
+    neg_counts = [num_examples-pos_count for pos_count in class_counts]
+    for i in range(len(class_counts)):
+        pos_weights[i] = neg_counts[i] / (class_counts[i] + 1e-5)
+
+    return torch.as_tensor(pos_weights, dtype=torch.float)
 
 class SentimentData(Dataset):
     def __init__(self, input_file, tokenizer, dataset_name, num_classes):
@@ -43,10 +53,6 @@ class SentimentData(Dataset):
         #       and make sure you pad your inputs.
 
         # Hint: remember to add start and pad to create inputs and labels
-        self.binary = False
-        if (dataset_name != "nlproc") & (num_classes == 2):
-            self.binary = True
-
         self.lengths=[]
         self.labels=[]
         self.tokenizer=tokenizer
@@ -59,7 +65,8 @@ class SentimentData(Dataset):
 
         self.tokens=[]
         self.texts=[]
-        # self.start=tokenizer.bos_token_id
+        multi_class_counts = [0] * 8
+        binary_class_counts = [0] * num_classes
 
         with open(input_file,'r') as f:
             
@@ -69,58 +76,43 @@ class SentimentData(Dataset):
                 if not line:
                     break
 
-                if (dataset_name == "nlproc"):
-                    self.labels.append(int(line[0]))
-                    text = line[1:]
-                    self.texts.append(text)
-                    # toke=self.tokenizer(text)['input_ids'][:(window_size)]
-                    toke=self.tokenizer(text)['input_ids']
-                    #toke.insert(0,self.cls_token)
-                    #toke.append(self.sep_token)
-                    self.tokens.append(torch.as_tensor(toke))
-                else:
-                    tabbed = line.split("\t")
-                    text = tabbed[0]
-                    line_labels = tabbed[1]
-                    # toke=self.tokenizer(text)['input_ids'][:(window_size)]
-                    toke=self.tokenizer(text)['input_ids']
-                    #toke.insert(0,self.cls_token)
-                    #toke.append(self.sep_token)
-                    num_emotions = 8
-                    prepped_label = [0] * num_emotions
+                tabbed = line.split("\t")
+                text = tabbed[0]
+                line_labels = tabbed[1]
+                toke=self.tokenizer(text)['input_ids']
+                num_emotions = 8
+                prepped_label = [0] * num_emotions
 
-                    for i in range(num_emotions):
-                        if str(i+1) in line_labels:
-                            prepped_label[i] = 1
-                    if self.binary:
+                for i in range(num_emotions):
+                    if str(i+1) in line_labels:
+                        prepped_label[i] = 1
+                        multi_class_counts[i] += 1
 
-                        sentiment=convert_to_binary(prepped_label)
-                        if sentiment==None:
-                            #print("Throw this line out")
-                            #print(prepped_label)
-                            continue
-                        else:
-                            self.labels.append(sentiment)
+                if (num_classes == 1):
+                    sentiment=convert_to_binary(prepped_label)
+                    if sentiment==None:
+                        #print("Throw this line out")
+                        #print(prepped_label)
+                        continue
                     else:
-                        self.labels.append(prepped_label)
-                    self.texts.append(text)
-                    
-                    self.tokens.append(torch.as_tensor(toke))
-                # cent.insert(0,'START')
-                # token=self.tokenizer(line)['input_ids']
-                # token=token[:self.window_size]
-                # token.insert(0,self.start)
-                # token.append(self.start)
+                        self.labels.append([sentiment])
+                        binary_class_counts[0] += sentiment
+                else:
+                    self.labels.append(prepped_label)
+                self.texts.append(text)
                 
-                # self.tense.append(torch.as_tensor(token))
-                # temp=torch.ones(self.window_size+2)
-                # temp[len(token):]=0.0
-                # self.masks.append(temp)
-                
+                self.tokens.append(torch.as_tensor(toke))
                 self.lengths.append(len(toke))
        
         self.labels=torch.as_tensor(self.labels)
         self.tokens=pad_sequence(self.tokens,batch_first=True,padding_value=self.pad_token)
+        num_examples  = len(self.tokens)
+        if (num_classes == 1):
+            class_counts = binary_class_counts
+        else: 
+            class_counts = multi_class_counts
+
+        self.pos_weights = calculate_pos_weights(class_counts, num_examples)
         # print("Size of tokens: " + str(self.tokens.size()))
         # print("Size of labels: " + str(self.labels.size()))
         # print("Size of lengths: " + str(len(self.lengths)))
@@ -138,9 +130,6 @@ class SentimentData(Dataset):
         len should return a the length of the dataset
         :return: an integer length of the dataset
         """
-        # TODO: Override method to return length of dataset
-        
-        # return self.sentences.shape[0]
         return self.labels.shape[0]
 
     def __getitem__(self, idx):
@@ -151,9 +140,6 @@ class SentimentData(Dataset):
         :param idx: the index for retrieval
         :return: tuple or dictionary of the data
         """
-        # TODO: Override method to return the items in dataset
-       
-        #item={"input":self.tokens[idx,:],"label":self.labels[idx],"pad_token":self.pad_token}
         item={"input":self.tokens[idx,:],"label":self.labels[idx],"lengths":self.lengths[idx]}
         return (self.tokens[idx], self.labels[idx], self.lengths[idx])
 

@@ -9,7 +9,6 @@ class Sentiment_Analysis_Model(nn.Module):
         
         '''
         self.device_type = device_type
-        #self.xlmr_model = XLMRobertaModel.from_pretrained('xlm-roberta-base')
         if (model_type == 'xlmr'):
             self.model = XLMRobertaModel.from_pretrained('xlm-roberta-base')
         else: 
@@ -34,11 +33,7 @@ class Sentiment_Analysis_Model(nn.Module):
         (_, pooler_output) = self.model(inputs,attention_mask=attention_mask).to_tuple()
         dropout_output = self.dropout(pooler_output)
         dense_output = self.dense(dropout_output)
-
-        if (self.num_classes == 2):
-            to_return = self.softmax(dense_output)
-        else: 
-            to_return = self.sig(dense_output)
+        to_return = self.sig(dense_output)
 
         return (dense_output, to_return)
 
