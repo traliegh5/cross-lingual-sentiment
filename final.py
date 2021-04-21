@@ -21,22 +21,18 @@ experiment = Experiment(project_name="cross-lingual-sentiment-analysis")
 
 hyperparams = {
 "batch_size": 16,
-"window_size": 60, # max len is ~ 126 (nlproc xlmr), 71 (xed xlmr), 67 (xed bert), 64 (fi xlmr)
+# max len is ~ 126 (nlproc xlmr), 71 (xed xlmr), 67 (xed bert), 64 (fi xlmr)
 "learning_rate":0.001,
 "num_epochs":3
 }
 
-def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_weight, hyperparams, pad_id):
-    # Loss 
-        
+def train(model, train_loader, optimizer,experiment, num_classes, pos_weight, hyperparams):        
     torch.cuda.empty_cache()
     
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
-    total_loss = 0
     losses = []
     total_f1 = 0
-    total_word_count = 0
     correct_predictions = 0
     num_examples = 0
     total_batches = 0
@@ -60,10 +56,10 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
                 optimizer.zero_grad()
                 (logits, probs) = model(inputs, lengths)
 
-                #labels = labels.type_as(logits)
                 round_probs = np.round(probs.cpu().data.numpy())
-                #print(round_probs)
-                # print(labels[:10])
+                if (batch_num % 100 == 0):
+                    print(round_probs)
+                    print(labels)
 
                 labels_for_loss = labels.type_as(logits)
 
@@ -74,24 +70,10 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
                 # from post
                 nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
-                scheduler.step() 
-                #optimizer.step() <- for regular cross entropy
 
-                word_count = sum(lengths)
-                total_loss += (loss * word_count)
-                total_word_count += word_count
+                f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
 
-                if (num_classes == 1):
-                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
-                else:
-                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
-
-                # print("Round probs")
-                # print(round_probs)
-                # print("Labels")
-                # print(labels)
                 num_correct = np.sum((round_probs == labels.cpu().data.numpy()).all(1))
-                #num_correct = np.sum(round_probs == labels.cpu().data.numpy())
                 accuracy_out_of = num_in_batch
                 print("Num correct: " + str(num_correct))
                 print("F1: " + str(f1))
@@ -104,19 +86,16 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
                 print("Batch: " + str(batch_num) + " | loss: " + str(loss.item()) + " | accuracy: " 
                     + str(num_correct/accuracy_out_of))
 
-                # print("At batch " + str(batch_num) + " loss is: " + str(loss))
                 del inputs
                 del labels
                 del lengths
                 gc.collect()
                 torch.cuda.empty_cache()
 
-        #mean_loss = total_loss / total_word_count
         mean_loss = np.mean(losses)
         print("Mean loss: " + str(mean_loss))
         accuracy = correct_predictions / num_examples
         perplexity = np.exp(mean_loss)
-        #perplexity = torch.exp(mean_loss).detach()
         overall_f1 = total_f1/total_batches
 
         print("perplexity:", perplexity)
@@ -127,18 +106,13 @@ def train(model, train_loader, optimizer,scheduler,experiment, num_classes, pos_
         experiment.log_metric("F1", overall_f1)
 
 # Test the model on the test set - report perplexity
-def test(model, test_loader, experiment, num_classes, pos_weight, hyperparams, pad_id):
-    total_loss = 0
+def test(model, test_loader, experiment, num_classes, pos_weight, hyperparams):
     losses = []
     total_f1 = 0
-    total_word_count = 0
     correct_predictions = 0
     num_examples = 0
 
-    if (num_classes == 2):
-        loss_fn = nn.CrossEntropyLoss(ignore_index=pad_id)
-    else:
-        loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     model = model.eval()
 
@@ -158,27 +132,16 @@ def test(model, test_loader, experiment, num_classes, pos_weight, hyperparams, p
                 optimizer.zero_grad()
                 (logits, probs) = model(inputs, lengths)
 
-                #labels = labels.type_as(logits)
                 round_probs = np.round(probs.cpu().data.numpy())
-                #print(round_probs)
-                # print(labels[:10])
 
                 labels_for_loss = labels.type_as(logits)
 
                 loss = loss_fn(logits, labels_for_loss)
                 losses.append(loss.item())
 
-                word_count = sum(lengths)
-                total_loss += (loss * word_count)
-                total_word_count += word_count
-
-                if (num_classes == 1):
-                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
-                else:
-                    f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
+                f1 = f1_score(labels.cpu().data.numpy(), round_probs, average='macro',zero_division=1)
 
                 num_correct = np.sum((round_probs == labels.cpu().data.numpy()).all(1))
-                #num_correct = np.sum(round_probs == labels.cpu().data.numpy())
                 accuracy_out_of = num_in_batch
                 print("Num correct: " + str(num_correct))
                 print("F1: " + str(f1))
@@ -191,12 +154,10 @@ def test(model, test_loader, experiment, num_classes, pos_weight, hyperparams, p
                 print("Batch: " + str(batch_num) + " | loss: " + str(loss.item()) + " | accuracy: " 
                     + str(num_correct/accuracy_out_of))
 
-        #mean_loss = total_loss / total_word_count
         mean_loss = np.mean(losses)
         print("Mean loss: " + str(mean_loss))
         accuracy = correct_predictions / num_examples
         perplexity = np.exp(mean_loss)
-        #perplexity = torch.exp(mean_loss).detach()
         overall_f1 = total_f1/batch_num
 
         print("perplexity:", perplexity)
@@ -250,8 +211,8 @@ if __name__ == "__main__":
     vocab_size = len(tokenizer)
     model = Sentiment_Analysis_Model(vocab_size, model_type, num_classes, device_type).to(device)
 
-    #optimizer = torch.optim.Adam(model.parameters(), 2e-5)
-    optimizer = AdamW(model.parameters(), lr=2e-5, correct_bias=False) # from post
+    optimizer = torch.optim.Adam(model.parameters(), 2e-5)
+    #optimizer = AdamW(model.parameters(), lr=2e-5, correct_bias=False) # from post
     
     train_dataset = SentimentData(train_file, tokenizer, dataset_name, num_classes)
     test_dataset = SentimentData(test_file, tokenizer, dataset_name, num_classes)
@@ -259,19 +220,16 @@ if __name__ == "__main__":
     test_pos_weights = test_dataset.pos_weights.to(device)
     pad_token = train_dataset.pad_token
 
-    # if (dataset_name!= "nlproc") and (model_type!="xlmr"):
-    if (model_type!="xlmr"):
-        length=train_dataset.__len__()
-        big=int(.9*length)
-        splits=[big,length-big]
-        train_dataset,test_dataset=random_split(train_dataset,splits)
+    # Seperating all train datasets - we want to split up even for the xlmr model to be able to compare
+    # english accuracy and F1 to the values provided in the xed paper
+    length=train_dataset.__len__()
+    big=int(.9*length)
+    splits=[big,length-big]
+    train_dataset,eval_dataset=random_split(train_dataset,splits)
 
     train_loader = DataLoader(train_dataset, batch_size=hyperparams['batch_size'], shuffle=True)
+    eval_loader = DataLoader(eval_dataset, batch_size=hyperparams['batch_size'])
     test_loader = DataLoader(test_dataset, batch_size=hyperparams['batch_size'])
-
-    # from post
-    total_steps = len(train_dataset) * hyperparams['num_epochs']
-    scheduler = get_linear_schedule_with_warmup(optimizer,num_warmup_steps=0,num_training_steps=total_steps)
                 
     if args.load:
         print("loading model...")
@@ -279,11 +237,14 @@ if __name__ == "__main__":
     if args.train:
         # run train loop here
         print("running fine-tuning loop...")
-        train(model, train_loader, optimizer, scheduler, experiment, num_classes, train_pos_weights, hyperparams, pad_token)
+        train(model, train_loader, optimizer, experiment, num_classes, train_pos_weights, hyperparams)
     if args.save:
         print("saving model...")
         torch.save(model.state_dict(), './model.pt')
     if args.test:
         # run test loop here
-        print("running testing loop...")
-        test(model, test_loader, experiment, num_classes, test_pos_weights, hyperparams, pad_token)
+        print("running testing loop - same language...")
+        test(model, eval_loader, experiment, num_classes, test_pos_weights, hyperparams)
+        if (model_type == 'xlmr'):
+            print("running testing loop - different language...")
+            test(model, test_loader, experiment, num_classes, test_pos_weights, hyperparams)
